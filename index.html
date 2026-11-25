@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="DayQuest">
+<meta name="application-name" content="DayQuest">
+<meta name="theme-color" content="#14112b">
+<meta name="format-detection" content="telephone=no">
+<title>DayQuest</title>
+<base href="/dayquest/">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">DQ</div>
+      <div>
+        <div class="brand-name">DayQuest</div>
+        <div class="level-line"><span id="levelLabel">Level 1</span> <span class="dot">•</span> <span id="xpLabel">0 XP</span></div>
+      </div>
+    </div>
+    <div class="top-actions">
+      <div class="streak-chip" id="streakChip" title="Daily streak">🔥 <span id="streakNum">0</span></div>
+      <button class="icon-btn" id="settingsBtn" aria-label="Settings">⚙️</button>
+    </div>
+  </header>
+  <div class="xpbar"><div class="xpfill" id="xpFill"></div></div>
+
+  <nav class="daypicker" aria-label="Choose day">
+    <button class="icon-btn small" id="prevDay" aria-label="Previous day">‹</button>
+    <div class="week-strip" id="weekStrip"></div>
+    <button class="icon-btn small" id="nextDay" aria-label="Next day">›</button>
+  </nav>
+  <div class="day-title-row">
+    <div class="day-title" id="dayTitle">Today</div>
+    <button class="text-btn" id="todayBtn">Jump to today</button>
+    <label class="text-btn date-input-wrap">Pick date<input type="date" id="dateInput"></label>
+  </div>
+
+  <section class="score-card">
+    <div class="ring-wrap">
+      <svg viewBox="0 0 120 120" class="ring">
+        <circle cx="60" cy="60" r="52" class="ring-bg"/>
+        <circle cx="60" cy="60" r="52" class="ring-fg" id="ringFg"/>
+      </svg>
+      <div class="ring-center"><div class="ring-score" id="dayScore">0</div><div class="ring-label">points</div></div>
+    </div>
+    <div class="score-side">
+      <div class="score-goal"><span id="pctLabel">0%</span> of today's quest done</div>
+      <div class="challenge" id="challengeBox">
+        <div class="challenge-tag">Daily challenge <span id="challengeBonus">+25</span></div>
+        <div class="challenge-text" id="challengeText">...</div>
+      </div>
+    </div>
+  </section>
+
+  <nav class="tabs" id="tabs" role="tablist"></nav>
+
+  <main id="view" class="view"></main>
+</div>
+
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+<canvas id="confetti"></canvas>
+
+<div id="sheet" class="sheet hidden" role="dialog" aria-modal="true">
+  <div class="sheet-backdrop" data-close></div>
+  <div class="sheet-panel">
+    <div class="sheet-grab"></div>
+    <div id="sheetBody"></div>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script src="ics.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

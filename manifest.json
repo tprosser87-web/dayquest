@@ -1,0 +1,17 @@
+{
+  "name": "DayQuest Planner",
+  "short_name": "DayQuest",
+  "description": "A gamified daily planner: priorities, to-dos, workouts, meals, gratitude, notes and time boxing.",
+  "start_url": "/dayquest/",
+  "scope": "/dayquest/",
+  "id": "/dayquest/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#14112b",
+  "theme_color": "#14112b",
+  "icons": [
+    {"src": "/dayquest/icons/icon-192.png", "sizes": "192x192", "type": "image/png"},
+    {"src": "/dayquest/icons/icon-512.png", "sizes": "512x512", "type": "image/png"},
+    {"src": "/dayquest/icons/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ]
+}
