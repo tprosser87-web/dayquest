@@ -13,7 +13,17 @@
     s.badges = s.badges || {};
     s.calCache = s.calCache || {};
     s.tab = s.tab || 'priorities';
+    if (s.tab === 'meals') s.tab = 'nutrition';
     s.workoutTemplates = s.workoutTemplates || [];
+    s.habitTemplates = s.habitTemplates || [];
+    s.supplementTemplates = s.supplementTemplates || [];
+    Object.keys(s.days).forEach(function (k) {
+      var d = s.days[k] || {};
+      if (!d.meals) d.meals = { breakfast: '', lunch: '', dinner: '', snacks: '' };
+      d.habits = d.habits || {};
+      d.supplements = d.supplements || {};
+      s.days[k] = d;
+    });
     return s;
   }
   var saveTimer;
@@ -32,15 +42,19 @@
 
   function day(k) {
     k = k || selected;
-    if (!state.days[k]) state.days[k] = { priorities: [], work: [], home: [], workouts: [], meals: { breakfast: '', lunch: '', dinner: '', snacks: '' }, gratitude: ['', '', ''], notes: '', timebox: {}, challengeClaimed: false };
-    return state.days[k];
+    if (!state.days[k]) state.days[k] = { priorities: [], work: [], home: [], workouts: [], meals: { breakfast: '', lunch: '', dinner: '', snacks: '' }, gratitude: ['', '', ''], notes: '', timebox: {}, habits: {}, supplements: {}, challengeClaimed: false };
+    var d = state.days[k];
+    if (!d.meals) d.meals = { breakfast: '', lunch: '', dinner: '', snacks: '' };
+    d.habits = d.habits || {};
+    d.supplements = d.supplements || {};
+    return d;
   }
   function peek(k) { return state.days[k] || null; }
   function uid() { return Math.random().toString(36).slice(2, 10); }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
 
   /* ---------- Scoring ---------- */
-  var PTS = { priority: 30, allPriorities: 20, work: 10, home: 10, workout: 15, meal: 5, gratitude: 5, notes: 5, slot: 2, slotMax: 20, challenge: 25 };
+  var PTS = { priority: 30, allPriorities: 20, work: 10, home: 10, workout: 15, meal: 5, gratitude: 5, notes: 5, slot: 2, slotMax: 20, challenge: 25, habit: 10, allHabits: 15, supplement: 5 };
   function scoreOf(d) {
     if (!d) return { score: 0, done: 0, total: 0 };
     var s = 0, done = 0, total = 0;
@@ -49,8 +63,12 @@
     d.work.forEach(function (i) { total++; if (i.done) { s += PTS.work; done++; } });
     d.home.forEach(function (i) { total++; if (i.done) { s += PTS.home; done++; } });
     d.workouts.forEach(function (i) { total++; if (i.done) { s += PTS.workout; done++; } });
+    (state.habitTemplates || []).forEach(function (h) { total++; if (d.habits && d.habits[h.id]) { s += PTS.habit; done++; } });
+    if ((state.habitTemplates || []).length >= 3 && (state.habitTemplates || []).every(function (h) { return d.habits && d.habits[h.id]; })) s += PTS.allHabits;
+    (state.supplementTemplates || []).forEach(function (h) { total++; if (d.supplements && d.supplements[h.id]) { s += PTS.supplement; done++; } });
     var meals = ['breakfast', 'lunch', 'dinner', 'snacks'];
-    meals.forEach(function (m) { total++; if ((d.meals[m] || '').trim()) { s += PTS.meal; done++; } });
+    var mealObj = d.meals || {};
+    meals.forEach(function (m) { total++; if ((mealObj[m] || '').trim()) { s += PTS.meal; done++; } });
     d.gratitude.forEach(function (g) { total++; if ((g || '').trim()) { s += PTS.gratitude; done++; } });
     if ((d.notes || '').trim()) s += PTS.notes;
     var slots = Object.keys(d.timebox).filter(function (k) { return (d.timebox[k] || '').trim(); }).length;
@@ -106,20 +124,31 @@
     { id: 'box8', text: 'Time box at least 8 slots', test: function (d) { return scoreOf(d).slots >= 8; } },
     { id: 'big', text: 'Score 150 points today', test: function (d) { var c = d.challengeClaimed; d.challengeClaimed = false; var s = scoreOf(d).score; d.challengeClaimed = c; return s >= 150; } },
     { id: 'clear', text: 'Clear your whole work list (3+ items)', test: function (d) { return d.work.length >= 3 && d.work.every(function (i) { return i.done; }); } },
-    { id: 'combo', text: 'Finish a priority, a workout and a gratitude', test: function (d) { return d.priorities.some(function (i) { return i.done; }) && d.workouts.some(function (w) { return w.done; }) && d.gratitude.some(function (g) { return (g || '').trim(); }); } }
+    { id: 'combo', text: 'Finish a priority, a workout and a gratitude', test: function (d) { return d.priorities.some(function (i) { return i.done; }) && d.workouts.some(function (w) { return w.done; }) && d.gratitude.some(function (g) { return (g || '').trim(); }); } },
+    { id: 'habits', text: 'Complete all of your atomic habits (2+)', test: function (d) { var t = state.habitTemplates || []; return t.length >= 2 && t.every(function (h) { return d.habits && d.habits[h.id]; }); } },
+    { id: 'supps', text: 'Take all of your supplements (2+)', test: function (d) { var t = state.supplementTemplates || []; return t.length >= 2 && t.every(function (h) { return d.supplements && d.supplements[h.id]; }); } },
+    { id: 'stack', text: 'Finish a habit, a priority and plan a meal', test: function (d) { var meals = d.meals || {}; var planned = ['breakfast', 'lunch', 'dinner', 'snacks'].some(function (m) { return (meals[m] || '').trim(); }); var habit = (state.habitTemplates || []).some(function (h) { return d.habits && d.habits[h.id]; }); return habit && d.priorities.some(function (i) { return i.done; }) && planned; } }
   ];
+  var ORIG_CHALLENGE_COUNT = 10;
   function challengeFor(k) {
-    var h = 0; for (var i = 0; i < k.length; i++) h = (h * 31 + k.charCodeAt(i)) >>> 0;
-    return CHALLENGES[h % CHALLENGES.length];
+    var d = peek(k);
+    if (d && d.challengeId) {
+      for (var i = 0; i < CHALLENGES.length; i++) if (CHALLENGES[i].id === d.challengeId) return CHALLENGES[i];
+    }
+    var h = 0; for (var j = 0; j < k.length; j++) h = (h * 31 + k.charCodeAt(j)) >>> 0;
+    var pool = (d && !d.challengeId) ? ORIG_CHALLENGE_COUNT : CHALLENGES.length;
+    var ch = CHALLENGES[h % pool];
+    if (d && !d.challengeId) { d.challengeId = ch.id; save(); }
+    return ch;
   }
 
   /* ---------- Badges ---------- */
   var BADGES = [
     { id: 'first', emo: '🌱', name: 'First Step', desc: 'Complete any item', test: function () { return anyDay(function (d) { return scoreOf(d).done > 0; }); } },
-    { id: 'prio', emo: '🎯', name: 'Priority Pro', desc: 'All 3 priorities in a day', test: function () { return anyDay(function (d) { return CHALLENGES[0].test(d); }); } },
+    { id: 'prio', emo: '🎯', name: 'Priority Pro', desc: 'All 3 priorities in a day', test: function () { return anyDay(function (d) { return d.priorities.length >= 3 && d.priorities.every(function (i) { return i.done; }); }); } },
     { id: 'century', emo: '💯', name: 'Century', desc: '100+ points in a day', test: function () { return anyDay(function (d) { return scoreOf(d).score >= 100; }); } },
-    { id: 'grateful', emo: '💛', name: 'Grateful Heart', desc: '3 gratitudes in a day', test: function () { return anyDay(function (d) { return CHALLENGES[4].test(d); }); } },
-    { id: 'chef', emo: '🥗', name: 'Meal Master', desc: 'Plan all 4 meals', test: function () { return anyDay(function (d) { return CHALLENGES[5].test(d); }); } },
+    { id: 'grateful', emo: '💛', name: 'Grateful Heart', desc: '3 gratitudes in a day', test: function () { return anyDay(function (d) { return d.gratitude.every(function (g) { return (g || '').trim(); }); }); } },
+    { id: 'chef', emo: '🥗', name: 'Meal Master', desc: 'Plan all 4 meals', test: function () { return anyDay(function (d) { var m = d.meals || {}; return ['breakfast', 'lunch', 'dinner', 'snacks'].every(function (k) { return (m[k] || '').trim(); }); }); } },
     { id: 'timelord', emo: '⏳', name: 'Time Lord', desc: 'Box 10+ slots in a day', test: function () { return anyDay(function (d) { return scoreOf(d).slots >= 10; }); } },
     { id: 'sweat', emo: '💪', name: 'Sweat Starter', desc: 'Finish your first workout', test: function () { return anyDay(function (d) { return d.workouts.some(function (w) { return w.done; }); }); } },
     { id: 'iron', emo: '🏋️', name: 'Iron Week', desc: `${WEEK_TARGET} workout days in a week`, test: function () { return workoutWeekStreak() >= 1 || anyWeekWorkouts(); } },
@@ -129,7 +158,12 @@
     { id: 'champ', emo: '🏆', name: 'Challenger', desc: 'Win 5 daily challenges', test: function () { return Object.keys(state.days).filter(function (k) { return state.days[k].challengeClaimed; }).length >= 5; } },
     { id: 'lvl5', emo: '⭐', name: 'Rising Star', desc: 'Reach level 5', test: function () { return levelFor(totalXP()) >= 5; } },
     { id: 'lvl10', emo: '🌟', name: 'Superstar', desc: 'Reach level 10', test: function () { return levelFor(totalXP()) >= 10; } },
-    { id: 'sweep', emo: '🧹', name: 'Clean Sweep', desc: 'Clear work and home lists (3+ each)', test: function () { return anyDay(function (d) { return d.work.length >= 3 && d.home.length >= 3 && d.work.concat(d.home).every(function (i) { return i.done; }); }); } }
+    { id: 'sweep', emo: '🧹', name: 'Clean Sweep', desc: 'Clear work and home lists (3+ each)', test: function () { return anyDay(function (d) { return d.work.length >= 3 && d.home.length >= 3 && d.work.concat(d.home).every(function (i) { return i.done; }); }); } },
+    { id: 'atom', emo: '⚛️', name: 'First Atom', desc: 'Complete your first atomic habit', test: function () { return anyDay(function (d) { return Object.keys(d.habits || {}).some(function (id) { return d.habits[id]; }); }); } },
+    { id: 'chain7', emo: '🔗', name: 'Chain Maker', desc: 'Hold a 7 day habit streak', test: function () { return (state.habitTemplates || []).some(function (h) { return habitBestStreak(h.id) >= 7; }); } },
+    { id: 'chain30', emo: '💎', name: 'Identity Shift', desc: 'Hold a 30 day habit streak', test: function () { return (state.habitTemplates || []).some(function (h) { return habitBestStreak(h.id) >= 30; }); } },
+    { id: 'stackr', emo: '📚', name: 'Habit Stacker', desc: 'Complete all habits in a day (3+)', test: function () { var t = state.habitTemplates || []; return t.length >= 3 && anyDay(function (d) { return t.every(function (h) { return d.habits && d.habits[h.id]; }); }); } },
+    { id: 'vita', emo: '💊', name: 'Daily Dose', desc: 'Take all supplements in a day (2+)', test: function () { var t = state.supplementTemplates || []; return t.length >= 2 && anyDay(function (d) { return t.every(function (h) { return d.supplements && d.supplements[h.id]; }); }); } }
   ];
   function anyDay(fn) { return Object.keys(state.days).some(function (k) { return fn(state.days[k]); }); }
   function anyWeekWorkouts() { var seen = {}; return Object.keys(state.days).some(function (k) { var ws = weekStartKey(k); if (seen[ws]) return false; seen[ws] = 1; return workoutDaysInWeek(ws) >= WEEK_TARGET; }); }
@@ -223,8 +257,8 @@
 
   /* ---------- Tabs ---------- */
   var TABS = [
-    { id: 'priorities', label: '🎯 Top 3' }, { id: 'work', label: '💼 Work' }, { id: 'home', label: '🏡 Home' },
-    { id: 'workout', label: '💪 Workout' }, { id: 'meals', label: '🥗 Meals' }, { id: 'gratitude', label: '💛 Gratitude' },
+    { id: 'priorities', label: '🎯 Top 3' }, { id: 'habits', label: '⚛️ Habits' }, { id: 'work', label: '💼 Work' }, { id: 'home', label: '🏡 Home' },
+    { id: 'workout', label: '💪 Workout' }, { id: 'nutrition', label: '🥗 Nutrition' }, { id: 'gratitude', label: '💛 Gratitude' },
     { id: 'notes', label: '📝 Notes' }, { id: 'timebox', label: '⏰ Time Box' }, { id: 'stats', label: '🏆 Stats' }
   ];
   function tabCount(id) {
@@ -232,6 +266,14 @@
     var lists = { priorities: d.priorities, work: d.work, home: d.home, workout: d.workouts };
     if (lists[id] && lists[id].length) return lists[id].filter(function (i) { return i.done; }).length + '/' + lists[id].length;
     if (id === 'gratitude') { var g = d.gratitude.filter(function (x) { return (x || '').trim(); }).length; return g ? g + '/3' : ''; }
+    if (id === 'habits') {
+      var ht = state.habitTemplates || []; if (!ht.length) return '';
+      return ht.filter(function (h) { return d.habits && d.habits[h.id]; }).length + '/' + ht.length;
+    }
+    if (id === 'nutrition') {
+      var st = state.supplementTemplates || []; if (!st.length) return '';
+      return st.filter(function (h) { return d.supplements && d.supplements[h.id]; }).length + '/' + st.length;
+    }
     return '';
   }
   function renderTabs() {
@@ -251,7 +293,7 @@
   var view = $('view');
   function renderView() {
     renderTabs();
-    var fn = { priorities: vPriorities, work: function () { vList('work'); }, home: function () { vList('home'); }, workout: vWorkout, meals: vMeals, gratitude: vGratitude, notes: vNotes, timebox: vTimebox, stats: vStats }[state.tab] || vPriorities;
+    var fn = { priorities: vPriorities, habits: vHabits, work: function () { vList('work'); }, home: function () { vList('home'); }, workout: vWorkout, nutrition: vNutrition, meals: vNutrition, gratitude: vGratitude, notes: vNotes, timebox: vTimebox, stats: vStats }[state.tab] || vPriorities;
     view.style.animation = 'none'; void view.offsetWidth; view.style.animation = '';
     fn();
   }
@@ -384,14 +426,125 @@
   function lastWorkoutDay() { var ks = Object.keys(state.days).filter(function (k) { return k < selected && state.days[k].workouts.length; }).sort(); return ks[ks.length - 1]; }
 
   /* Meals */
-  function vMeals() {
-    var d = day(), meals = [['breakfast', '🍳 Breakfast'], ['lunch', '🥪 Lunch'], ['dinner', '🍝 Dinner'], ['snacks', '🍎 Snacks']];
-    view.innerHTML = '<div class="panel"><h2>Meal Planning</h2><p class="sub">Plan ahead, eat better. <span class="pts">+' + PTS.meal + '</span> per meal planned.</p>' +
-      meals.map(function (m) { return '<div class="meal"><label>' + m[1] + '</label><textarea class="field" data-meal="' + m[0] + '" rows="2" placeholder="What\'s the plan?">' + esc(d.meals[m[0]]) + '</textarea></div>'; }).join('') +
-      '<div class="row-btns"><button class="btn ghost small" id="copyMeals">Copy from yesterday</button></div></div>';
-    bindTextPoints('[data-meal]', function (el) { return d.meals[el.dataset.meal]; }, function (el, v) { d.meals[el.dataset.meal] = v; }, PTS.meal);
-    $('copyMeals').onclick = function () { var y = peek(addDays(selected, -1)); if (!y) { toast('Nothing planned yesterday'); return; } d.meals = Object.assign({}, y.meals); afterChange(); vMeals(); toast('Meals copied'); };
+  function habitDoneOn(id, k) { var d = peek(k); return !!(d && d.habits && d.habits[id]); }
+  function habitStreak(id, endKey) {
+    var k = endKey || selected, n = 0;
+    if (!habitDoneOn(id, k)) {
+      if (k === todayKey()) k = addDays(k, -1);
+      else return 0;
+    }
+    while (habitDoneOn(id, k) && n < 3650) { n++; k = addDays(k, -1); }
+    return n;
   }
+  function habitBestStreak(id) {
+    var keys = Object.keys(state.days).sort(), best = 0, run = 0, prev = null;
+    keys.forEach(function (k) {
+      if (habitDoneOn(id, k)) { run = (prev && addDays(prev, 1) === k) ? run + 1 : 1; prev = k; best = Math.max(best, run); }
+      else { run = 0; prev = null; }
+    });
+    return best;
+  }
+  function templateList(kind) {
+    var key = kind === 'habit' ? 'habitTemplates' : 'supplementTemplates';
+    if (!state[key]) state[key] = [];
+    return state[key];
+  }
+  function dayFlags(d, kind) {
+    var field = kind === 'habit' ? 'habits' : 'supplements';
+    if (!d[field]) d[field] = {};
+    return d[field];
+  }
+  function habitWeekPips(id) {
+    var ws = weekStartKey(selected), html = '<div class="habit-week" aria-hidden="true">';
+    for (var i = 0; i < 7; i++) {
+      var k = addDays(ws, i);
+      html += '<i class="' + (habitDoneOn(id, k) ? 'on' : '') + (k === selected ? ' cur' : '') + '" title="' + k + '"></i>';
+    }
+    return html + '</div>';
+  }
+
+  function bindTemplateList(kind, rerender, ptsEach, allBonus) {
+    var d = day(), list = templateList(kind), flags = dayFlags(d, kind);
+    var ul = view.querySelector('.tmpl-list[data-kind="' + kind + '"]');
+    if (!ul) return;
+    ul.addEventListener('click', function (e) {
+      var li = e.target.closest('.item'); if (!li) return;
+      var it = list.find(function (x) { return x.id === li.dataset.id; }); if (!it) return;
+      var act = e.target.dataset.act;
+      if (act === 'toggle') {
+        flags[it.id] = !flags[it.id];
+        li.classList.toggle('done', !!flags[it.id]);
+        e.target.classList.toggle('on', !!flags[it.id]);
+        e.target.classList.remove('pop'); void e.target.offsetWidth; if (flags[it.id]) e.target.classList.add('pop');
+        var allOn = list.length >= 3 && list.every(function (x) { return flags[x.id]; });
+        var bonus = (kind === 'habit' && flags[it.id] && allOn) ? (allBonus || 0) : 0;
+        afterChange(e.target, flags[it.id] ? ptsEach + bonus : 0);
+        if (bonus) { toast('Every habit done! +' + bonus + ' bonus'); confetti(160); }
+        else if (flags[it.id] && list.length >= 2 && list.every(function (x) { return flags[x.id]; })) { toast(kind === 'habit' ? 'All habits done. Keep the chain going!' : 'All supplements checked off'); confetti(90); }
+        rerender();
+      } else if (act === 'del') {
+        if (!confirm('Remove "' + it.text + '" from every day? Past checks stay in your history.')) return;
+        var key = kind === 'habit' ? 'habitTemplates' : 'supplementTemplates';
+        state[key] = list.filter(function (x) { return x !== it; });
+        afterChange(); rerender();
+      }
+    });
+    ul.addEventListener('input', function (e) {
+      var li = e.target.closest('.item'); if (!li || e.target.dataset.act !== 'edit') return;
+      var it = list.find(function (x) { return x.id === li.dataset.id; });
+      if (it) { it.text = e.target.value; save(); }
+    });
+    ul.addEventListener('keydown', function (e) { if (e.key === 'Enter') e.target.blur(); });
+    var form = view.querySelector('.tmpl-add[data-kind="' + kind + '"]');
+    if (form) form.addEventListener('submit', function (e) {
+      e.preventDefault(); var inp = form.querySelector('input'); var v = inp.value.trim(); if (!v) return;
+      list.push({ id: uid(), text: v }); inp.value = ''; afterChange(); rerender();
+      var again = view.querySelector('.tmpl-add[data-kind="' + kind + '"] input'); if (again) again.focus();
+    });
+  }
+
+  function vHabits() {
+    var d = day(), list = templateList('habit'), flags = dayFlags(d, 'habit');
+    var doneN = list.filter(function (h) { return flags[h.id]; }).length;
+    var curBest = 0, ever = 0;
+    list.forEach(function (h) { curBest = Math.max(curBest, habitStreak(h.id)); ever = Math.max(ever, habitBestStreak(h.id)); });
+    view.innerHTML = '<div class="panel"><h2>Atomic Habits</h2><p class="sub">Small daily actions that compound. This list stays on every day until you edit it. Checks start fresh each morning. <span class="pts">+' + PTS.habit + ' each</span>' + (list.length >= 3 ? ', plus <span class="pts">+' + PTS.allHabits + '</span> for completing all of them' : '') + '.</p>' +
+      (list.length ? '<div class="stat-row"><div class="stat"><b>' + doneN + '/' + list.length + '</b><span>done today</span></div><div class="stat"><b>🔥 ' + curBest + '</b><span>top streak</span></div><div class="stat"><b>' + ever + '</b><span>best ever</span></div></div>' : '') +
+      '<ul class="list tmpl-list" data-kind="habit">' + list.map(function (h) {
+        var on = !!flags[h.id], st = habitStreak(h.id);
+        return '<li class="item' + (on ? ' done' : '') + '" data-id="' + h.id + '"><button class="check' + (on ? ' on' : '') + '" data-act="toggle" aria-label="Toggle done">✓</button>' +
+          '<div class="habit-main"><input class="item-text" value="' + esc(h.text) + '" data-act="edit" enterkeyhint="done" maxlength="140">' + habitWeekPips(h.id) + '</div>' +
+          '<span class="streak-mini' + (st ? '' : ' zero') + '" title="Current streak">🔥 ' + st + '</span>' +
+          '<button class="del" data-act="del" aria-label="Remove habit">×</button></li>';
+      }).join('') + '</ul>' +
+      (list.length ? '' : '<div class="empty">Add a small habit to start the chain. For example, read 10 pages of a book.</div>') +
+      '<form class="add-row tmpl-add" data-kind="habit"><input placeholder="Add a habit" enterkeyhint="done" maxlength="140"><button class="btn">Add</button></form></div>';
+    bindTemplateList('habit', vHabits, PTS.habit, PTS.allHabits);
+  }
+
+  function vNutrition() {
+    var d = day(), meals = [['breakfast', '🍳 Breakfast'], ['lunch', '🥪 Lunch'], ['dinner', '🍝 Dinner'], ['snacks', '🍎 Snacks']];
+    var list = templateList('supplement'), flags = dayFlags(d, 'supplement');
+    var doneN = list.filter(function (h) { return flags[h.id]; }).length;
+    view.innerHTML = '<div class="panel"><h2>Nutrition</h2><p class="sub">Plan your meals and check off today\'s supplements.</p></div>' +
+      '<div class="panel"><h3 style="margin-top:0">Meal planning</h3><p class="sub">Plan ahead, eat better. <span class="pts">+' + PTS.meal + '</span> per meal planned.</p>' +
+      meals.map(function (m) { return '<div class="meal"><label>' + m[1] + '</label><textarea class="field" data-meal="' + m[0] + '" rows="2" placeholder="What\'s the plan?">' + esc((d.meals || {})[m[0]]) + '</textarea></div>'; }).join('') +
+      '<div class="row-btns"><button class="btn ghost small" id="copyMeals">Copy meals from yesterday</button></div></div>' +
+      '<div class="panel"><h3 style="margin-top:0">Supplements</h3><p class="sub">This checklist stays on every day until you edit it. Checks start fresh each morning. <span class="pts">+' + PTS.supplement + '</span> each.</p>' +
+      (list.length ? '<p class="sub" style="margin-top:-4px">' + doneN + ' of ' + list.length + ' taken today</p>' : '') +
+      '<ul class="list tmpl-list" data-kind="supplement">' + list.map(function (h) {
+        var on = !!flags[h.id];
+        return '<li class="item' + (on ? ' done' : '') + '" data-id="' + h.id + '"><button class="check' + (on ? ' on' : '') + '" data-act="toggle" aria-label="Toggle done">✓</button>' +
+          '<input class="item-text" value="' + esc(h.text) + '" data-act="edit" enterkeyhint="done" maxlength="140">' +
+          '<button class="del" data-act="del" aria-label="Remove supplement">×</button></li>';
+      }).join('') + '</ul>' +
+      (list.length ? '' : '<div class="empty">Add the supplements you take on a normal day.</div>') +
+      '<form class="add-row tmpl-add" data-kind="supplement"><input placeholder="Add a supplement" enterkeyhint="done" maxlength="140"><button class="btn">Add</button></form></div>';
+    bindTextPoints('[data-meal]', function (el) { return (d.meals || {})[el.dataset.meal]; }, function (el, v) { if (!d.meals) d.meals = { breakfast: '', lunch: '', dinner: '', snacks: '' }; d.meals[el.dataset.meal] = v; }, PTS.meal);
+    $('copyMeals').onclick = function () { var y = peek(addDays(selected, -1)); if (!y || !y.meals) { toast('Nothing planned yesterday'); return; } d.meals = Object.assign({}, y.meals); afterChange(); vNutrition(); toast('Meals copied'); };
+    bindTemplateList('supplement', vNutrition, PTS.supplement, 0);
+  }
+
   function bindTextPoints(sel, get, set, pts) {
     view.querySelectorAll(sel).forEach(function (el) {
       el.addEventListener('input', function () {
@@ -559,7 +712,7 @@
         var e = state.badges[b.id];
         return '<div class="badge' + (e ? ' earned' : '') + '"><span class="emo">' + b.emo + '</span><b>' + b.name + '</b>' + esc(e ? 'Earned ' + fromKey(e).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : b.desc) + '</div>';
       }).join('') + '</div></div>' +
-      '<div class="panel"><h2>How scoring works</h2><p class="sub" style="line-height:1.6">Priority +' + PTS.priority + ' (all 3: +' + PTS.allPriorities + ' bonus) • Work or home task +10 • Exercise +' + PTS.workout + ' • Meal planned +' + PTS.meal + ' • Gratitude +' + PTS.gratitude + ' • Notes +' + PTS.notes + ' • Time block +' + PTS.slot + ' (max ' + PTS.slotMax + ') • Daily challenge +' + PTS.challenge + '. Every point is XP toward your next level.</p></div>';
+      '<div class="panel"><h2>How scoring works</h2><p class="sub" style="line-height:1.6">Priority +' + PTS.priority + ' (all 3: +' + PTS.allPriorities + ' bonus) • Atomic habit +' + PTS.habit + ' (all 3+: +' + PTS.allHabits + ' bonus) • Work or home task +10 • Exercise +' + PTS.workout + ' • Meal planned +' + PTS.meal + ' • Supplement +' + PTS.supplement + ' • Gratitude +' + PTS.gratitude + ' • Notes +' + PTS.notes + ' • Time block +' + PTS.slot + ' (max ' + PTS.slotMax + ') • Daily challenge +' + PTS.challenge + '. Every point is XP toward your next level.</p></div>';
   }
 
   /* ---------- Settings ---------- */
