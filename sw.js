@@ -1,4 +1,4 @@
-var CACHE = 'dayquest-v4';
+var CACHE = 'dayquest-v5';
 var BASE = self.location.pathname.replace(/sw\.js$/, '');
 var SHELL = [BASE, BASE + 'index.html', BASE + 'styles.css', BASE + 'app.js', BASE + 'ics.js', BASE + 'config.js', BASE + 'manifest.json', BASE + 'icons/apple-touch-icon.png', BASE + 'icons/icon-192.png', BASE + 'icons/icon-512.png', BASE + 'favicon.ico'];
 self.addEventListener('install', function (e) { e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(SHELL); }).then(function () { return self.skipWaiting(); })); });

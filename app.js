@@ -494,7 +494,7 @@
       var it = list.find(function (x) { return x.id === li.dataset.id; });
       if (it) { it.text = e.target.value; save(); }
     });
-    ul.addEventListener('keydown', function (e) { if (e.key === 'Enter') e.target.blur(); });
+    ul.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } });
     var form = view.querySelector('.tmpl-add[data-kind="' + kind + '"]');
     if (form) form.addEventListener('submit', function (e) {
       e.preventDefault(); var inp = form.querySelector('input'); var v = inp.value.trim(); if (!v) return;
@@ -512,8 +512,8 @@
       (list.length ? '<div class="stat-row"><div class="stat"><b>' + doneN + '/' + list.length + '</b><span>done today</span></div><div class="stat"><b>🔥 ' + curBest + '</b><span>top streak</span></div><div class="stat"><b>' + ever + '</b><span>best ever</span></div></div>' : '') +
       '<ul class="list tmpl-list" data-kind="habit">' + list.map(function (h) {
         var on = !!flags[h.id], st = habitStreak(h.id);
-        return '<li class="item' + (on ? ' done' : '') + '" data-id="' + h.id + '"><button class="check' + (on ? ' on' : '') + '" data-act="toggle" aria-label="Toggle done">✓</button>' +
-          '<div class="habit-main"><input class="item-text" value="' + esc(h.text) + '" data-act="edit" enterkeyhint="done" maxlength="140">' + habitWeekPips(h.id) + '</div>' +
+        return '<li class="item item-habit' + (on ? ' done' : '') + '" data-id="' + h.id + '"><button class="check' + (on ? ' on' : '') + '" data-act="toggle" aria-label="Toggle done">✓</button>' +
+          '<div class="habit-main"><textarea class="item-text wrap" rows="2" data-act="edit" enterkeyhint="done" maxlength="140">' + esc(h.text) + '</textarea>' + habitWeekPips(h.id) + '</div>' +
           '<span class="streak-mini' + (st ? '' : ' zero') + '" title="Current streak">🔥 ' + st + '</span>' +
           '<button class="del" data-act="del" aria-label="Remove habit">×</button></li>';
       }).join('') + '</ul>' +
