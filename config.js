@@ -4,5 +4,5 @@
    Leave blank until the worker is deployed. A value in Settings overrides this. */
 window.DAYQUEST_CONFIG = {
   BASE_PATH: '/dayquest/',
-  PROXY_BASE: ''
+  PROXY_BASE: 'https://dayquest-ics.tprosser87.workers.dev'
 };
